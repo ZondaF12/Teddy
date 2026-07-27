@@ -13,6 +13,8 @@ final class Reminder {
     /// Kept stable across edits so scheduled notification identifiers stay valid.
     var id: UUID
     var name: String
+    /// Optional notification body. Defaulted so existing stores migrate lightly.
+    var details: String = ""
     var hour: Int
     var minute: Int
     var repeatCount: Int
@@ -23,6 +25,7 @@ final class Reminder {
     init(
         id: UUID = UUID(),
         name: String,
+        details: String = "",
         hour: Int,
         minute: Int,
         repeatCount: Int = 1,
@@ -32,6 +35,7 @@ final class Reminder {
     ) {
         self.id = id
         self.name = name
+        self.details = details
         self.hour = hour
         self.minute = minute
         self.repeatCount = repeatCount
@@ -73,7 +77,7 @@ extension Reminder {
 
     /// Sendable copy of everything the scheduler needs, so models never cross a concurrency boundary.
     var schedule: ReminderSchedule {
-        ReminderSchedule(id: id, title: name, isEnabled: isEnabled, fireTimes: fireTimes)
+        ReminderSchedule(id: id, title: name, details: details, isEnabled: isEnabled, fireTimes: fireTimes)
     }
 }
 
@@ -81,11 +85,20 @@ extension Reminder {
 struct ReminderSchedule: Sendable {
     let id: UUID
     let title: String
+    let details: String
     let isEnabled: Bool
     let fireTimes: [DateComponents]
 
     func identifier(slot: Int) -> String {
         "\(id)-\(slot)"
+    }
+
+    /// A description replaces the burst progress text; without one, multi-slot
+    /// bursts fall back to "Reminder 2 of 3" and single shots have no body.
+    func body(slot: Int) -> String? {
+        guard details.isEmpty else { return details }
+        guard fireTimes.count > 1 else { return nil }
+        return "Reminder \(slot + 1) of \(fireTimes.count)"
     }
 
     /// Covers every slot a reminder could ever occupy, so shrinking a burst

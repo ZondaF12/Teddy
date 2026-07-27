@@ -37,12 +37,11 @@ nonisolated enum NotificationScheduler {
         guard schedule.isEnabled else { return }
 
         let center = UNUserNotificationCenter.current()
-        let total = schedule.fireTimes.count
         for (slot, components) in schedule.fireTimes.enumerated() {
             await addRequest(
                 id: schedule.identifier(slot: slot),
                 title: schedule.title,
-                body: total > 1 ? "Reminder \(slot + 1) of \(total)" : nil,
+                body: schedule.body(slot: slot),
                 components: components,
                 center: center
             )

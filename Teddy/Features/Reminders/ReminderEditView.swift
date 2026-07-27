@@ -17,6 +17,7 @@ struct ReminderEditView: View {
 
     // Edits are staged locally because SwiftData autosaves, which would make Cancel a no-op.
     @State private var name: String
+    @State private var details: String
     @State private var time: Date
     @State private var repeatCount: Int
     @State private var intervalMinutes: Int
@@ -24,6 +25,7 @@ struct ReminderEditView: View {
     init(reminder: Reminder?) {
         self.reminder = reminder
         _name = State(initialValue: reminder?.name ?? "")
+        _details = State(initialValue: reminder?.details ?? "")
         _repeatCount = State(initialValue: reminder?.repeatCount ?? 1)
         _intervalMinutes = State(initialValue: reminder?.intervalMinutes ?? Reminder.defaultIntervalMinutes)
 
@@ -35,6 +37,10 @@ struct ReminderEditView: View {
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedDetails: String {
+        details.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var previewTimes: [DateComponents] {
@@ -52,6 +58,12 @@ struct ReminderEditView: View {
             Form {
                 Section {
                     TextField("Name", text: $name)
+                    TextField("Description", text: $details, axis: .vertical)
+                        .lineLimit(1...3)
+                } footer: {
+                    Text(trimmedDetails.isEmpty && repeatCount > 1
+                         ? "Without a description, each notification shows its place in the burst."
+                         : "Shown as the notification message.")
                 }
 
                 Section("Time") {
@@ -105,6 +117,7 @@ struct ReminderEditView: View {
         let target = reminder ?? Reminder(name: trimmedName, hour: 0, minute: 0)
 
         target.name = trimmedName
+        target.details = trimmedDetails
         target.hour = components.hour ?? 0
         target.minute = components.minute ?? 0
         target.repeatCount = repeatCount
