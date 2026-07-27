@@ -19,7 +19,7 @@ struct RemindersListView: View {
                 ContentUnavailableView(
                     "No Reminders Yet",
                     systemImage: "bell.badge",
-                    description: Text("Tap + to add a reminder that nudges you on repeat.")
+                    description: Text("Zara go tap + to add a reminder otherwise this was pointless.")
                 )
             } else {
                 List {
