@@ -2,7 +2,7 @@
 //  ReminderEditView.swift
 //  Teddy
 //
-//  Created by Ruaridh Bell on 27/07/2026.
+//  Add and edit sheet — edits are staged locally so Cancel discards them.
 //
 
 import SwiftUI
@@ -97,6 +97,8 @@ struct ReminderEditView: View {
             }
         }
     }
+
+    // MARK: - Private
 
     private func save() {
         let components = Calendar.current.dateComponents([.hour, .minute], from: time)

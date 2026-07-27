@@ -12,7 +12,7 @@ import SwiftData
 struct TeddyApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
         .modelContainer(for: Reminder.self)
     }
