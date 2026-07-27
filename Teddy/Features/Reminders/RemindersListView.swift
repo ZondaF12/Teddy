@@ -30,8 +30,10 @@ struct RemindersListView: View {
                     }
                     .onDelete(perform: delete)
                 }
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(Theme.screenGradient().ignoresSafeArea())
         .navigationTitle("Reminders")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
