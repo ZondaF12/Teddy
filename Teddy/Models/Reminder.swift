@@ -2,7 +2,7 @@
 //  Reminder.swift
 //  Teddy
 //
-//  Created by Ruaridh Bell on 27/07/2026.
+//  A named daily reminder plus the burst of notification slots it fires.
 //
 
 import Foundation
