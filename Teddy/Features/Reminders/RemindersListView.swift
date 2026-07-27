@@ -32,7 +32,7 @@ struct RemindersListView: View {
                 }
             }
         }
-        .navigationTitle("Teddy")
+        .navigationTitle("Reminders")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add Reminder", systemImage: "plus") { isAddingReminder = true }
