@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct TeddyApp: App {
@@ -13,5 +14,6 @@ struct TeddyApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: Reminder.self)
     }
 }
