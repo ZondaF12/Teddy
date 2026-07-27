@@ -1,0 +1,7 @@
+# Xcode
+xcuserdata/
+DerivedData/
+
+# xcode-build-server (machine-specific paths)
+buildServer.json
+.compile
