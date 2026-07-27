@@ -25,11 +25,15 @@ struct RemindersListView: View {
                 List {
                     ForEach(reminders) { reminder in
                         ReminderRow(reminder: reminder)
-                            .contentShape(.rect)
                             .onTapGesture { editingReminder = reminder }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                     .onDelete(perform: delete)
                 }
+                .listStyle(.plain)
+                .listRowSpacing(10)
                 .scrollContentBackground(.hidden)
             }
         }
