@@ -2,18 +2,14 @@
 //  Reminder.swift
 //  Teddy
 //
-//  A named daily reminder plus the burst of notification slots it fires.
-//
 
 import Foundation
 import SwiftData
 
 @Model
 final class Reminder {
-    /// Kept stable across edits so scheduled notification identifiers stay valid.
     var id: UUID
     var name: String
-    /// Optional notification body. Defaulted so existing stores migrate lightly.
     var details: String = ""
     var hour: Int
     var minute: Int
@@ -21,6 +17,8 @@ final class Reminder {
     var intervalMinutes: Int
     var isEnabled: Bool
     var createdAt: Date
+    /// Start of day last marked Done; skips today's remaining burst.
+    var lastCompletedDay: Date?
 
     init(
         id: UUID = UUID(),
@@ -31,7 +29,8 @@ final class Reminder {
         repeatCount: Int = 1,
         intervalMinutes: Int = Reminder.defaultIntervalMinutes,
         isEnabled: Bool = true,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        lastCompletedDay: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -42,6 +41,15 @@ final class Reminder {
         self.intervalMinutes = intervalMinutes
         self.isEnabled = isEnabled
         self.createdAt = createdAt
+        self.lastCompletedDay = lastCompletedDay
+    }
+
+    func markCompletedToday(calendar: Calendar = .current, now: Date = .now) {
+        lastCompletedDay = calendar.startOfDay(for: now)
+    }
+
+    var isCompletedToday: Bool {
+        Self.isCompleted(on: lastCompletedDay, calendar: .current, now: .now)
     }
 }
 
@@ -49,8 +57,8 @@ extension Reminder {
     static let maxRepeatCount = 10
     static let intervalChoices = [5, 10, 15, 20, 30, 60]
     static let defaultIntervalMinutes = 20
+    static let scheduleLookAheadDays = 3
 
-    /// Burst slots as daily-matching components, wrapping past midnight.
     static func fireTimes(hour: Int, minute: Int, repeatCount: Int, intervalMinutes: Int) -> [DateComponents] {
         let minutesPerDay = 24 * 60
         return (0..<max(1, repeatCount)).map { slot in
@@ -61,6 +69,47 @@ extension Reminder {
 
     static func burstLabel(repeatCount: Int, intervalMinutes: Int) -> String {
         repeatCount > 1 ? "\(repeatCount)× every \(intervalMinutes) min" : "Once"
+    }
+
+    static func isCompleted(on lastCompletedDay: Date?, calendar: Calendar, now: Date) -> Bool {
+        guard let lastCompletedDay else { return false }
+        return calendar.isDate(lastCompletedDay, inSameDayAs: calendar.startOfDay(for: now))
+    }
+
+    static func upcomingFireDates(
+        hour: Int,
+        minute: Int,
+        repeatCount: Int,
+        intervalMinutes: Int,
+        lastCompletedDay: Date?,
+        from now: Date = .now,
+        calendar: Calendar = .current,
+        lookAheadDays: Int = Reminder.scheduleLookAheadDays
+    ) -> [(slot: Int, date: Date)] {
+        let startOfToday = calendar.startOfDay(for: now)
+        let skipToday = isCompleted(on: lastCompletedDay, calendar: calendar, now: now)
+        let slotComponents = fireTimes(
+            hour: hour,
+            minute: minute,
+            repeatCount: repeatCount,
+            intervalMinutes: intervalMinutes
+        )
+
+        var result: [(slot: Int, date: Date)] = []
+        for dayOffset in 0..<max(1, lookAheadDays) {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            if dayOffset == 0 && skipToday { continue }
+
+            for (slot, components) in slotComponents.enumerated() {
+                var dateComponents = calendar.dateComponents([.year, .month, .day], from: day)
+                dateComponents.hour = components.hour
+                dateComponents.minute = components.minute
+                dateComponents.second = 0
+                guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { continue }
+                result.append((slot: slot, date: fireDate))
+            }
+        }
+        return result
     }
 
     var fireTimes: [DateComponents] {
@@ -75,41 +124,81 @@ extension Reminder {
         DateComponents(hour: hour, minute: minute).timeLabel
     }
 
-    /// Sendable copy of everything the scheduler needs, so models never cross a concurrency boundary.
     var schedule: ReminderSchedule {
-        ReminderSchedule(id: id, title: name, details: details, isEnabled: isEnabled, fireTimes: fireTimes)
+        ReminderSchedule(
+            id: id,
+            title: name,
+            details: details,
+            isEnabled: isEnabled,
+            hour: hour,
+            minute: minute,
+            repeatCount: repeatCount,
+            intervalMinutes: intervalMinutes,
+            lastCompletedDay: lastCompletedDay
+        )
     }
 }
 
-/// Immutable view of a reminder's notification schedule.
 struct ReminderSchedule: Sendable {
     let id: UUID
     let title: String
     let details: String
     let isEnabled: Bool
-    let fireTimes: [DateComponents]
+    let hour: Int
+    let minute: Int
+    let repeatCount: Int
+    let intervalMinutes: Int
+    let lastCompletedDay: Date?
 
-    func identifier(slot: Int) -> String {
-        "\(id)-\(slot)"
+    var fireTimes: [DateComponents] {
+        Reminder.fireTimes(
+            hour: hour,
+            minute: minute,
+            repeatCount: repeatCount,
+            intervalMinutes: intervalMinutes
+        )
     }
 
-    /// A description replaces the burst progress text; without one, multi-slot
-    /// bursts fall back to "Reminder 2 of 3" and single shots have no body.
+    func identifier(slot: Int, on day: Date, calendar: Calendar = .current) -> String {
+        "\(id.uuidString)-\(slot)-\(Self.dayKey(for: day, calendar: calendar))"
+    }
+
+    /// Ids from the old repeating-slot scheduler.
+    var legacyIdentifiers: [String] {
+        (0..<Reminder.maxRepeatCount).map { "\(id.uuidString)-\($0)" }
+    }
+
     func body(slot: Int) -> String? {
         guard details.isEmpty else { return details }
         guard fireTimes.count > 1 else { return nil }
         return "Reminder \(slot + 1) of \(fireTimes.count)"
     }
 
-    /// Covers every slot a reminder could ever occupy, so shrinking a burst
-    /// cannot leave higher-numbered requests scheduled.
-    var allIdentifiers: [String] {
-        (0..<Reminder.maxRepeatCount).map(identifier(slot:))
+    func upcomingFireDates(
+        from now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [(slot: Int, date: Date)] {
+        Reminder.upcomingFireDates(
+            hour: hour,
+            minute: minute,
+            repeatCount: repeatCount,
+            intervalMinutes: intervalMinutes,
+            lastCompletedDay: lastCompletedDay,
+            from: now,
+            calendar: calendar
+        )
+    }
+
+    private static func dayKey(for day: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: day)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let dayValue = components.day ?? 0
+        return String(format: "%04d%02d%02d", year, month, dayValue)
     }
 }
 
 extension DateComponents {
-    /// Formats an hour/minute pair in the user's locale, e.g. "1:00 PM".
     var timeLabel: String {
         let reference = DateComponents(year: 2000, month: 1, day: 1, hour: hour ?? 0, minute: minute ?? 0)
         guard let date = Calendar.current.date(from: reference) else { return "" }

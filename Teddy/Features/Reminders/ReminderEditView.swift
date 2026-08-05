@@ -2,20 +2,17 @@
 //  ReminderEditView.swift
 //  Teddy
 //
-//  Add and edit sheet — edits are staged locally so Cancel discards them.
-//
 
 import SwiftUI
 import SwiftData
 
 struct ReminderEditView: View {
-    /// Edits an existing reminder, or creates one when nil.
     private let reminder: Reminder?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // Edits are staged locally because SwiftData autosaves, which would make Cancel a no-op.
+    // Staged locally so Cancel can discard (SwiftData autosaves).
     @State private var name: String
     @State private var details: String
     @State private var time: Date
@@ -109,8 +106,6 @@ struct ReminderEditView: View {
             }
         }
     }
-
-    // MARK: - Private
 
     private func save() {
         let components = Calendar.current.dateComponents([.hour, .minute], from: time)

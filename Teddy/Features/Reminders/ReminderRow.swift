@@ -16,7 +16,7 @@ struct ReminderRow: View {
                     .font(.title2)
                     .fontWeight(.medium)
                 Text(reminder.name)
-                Text(reminder.burstLabel)
+                Text(statusLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -34,6 +34,13 @@ struct ReminderRow: View {
             let schedule = reminder.schedule
             Task { await NotificationScheduler.schedule(schedule) }
         }
+    }
+
+    private var statusLabel: String {
+        if reminder.isEnabled, reminder.isCompletedToday {
+            return "Done for today"
+        }
+        return reminder.burstLabel
     }
 }
 

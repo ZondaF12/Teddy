@@ -2,17 +2,33 @@
 //  NotificationScheduler.swift
 //  Teddy
 //
-//  Local UserNotifications for reminder bursts — one repeating daily
-//  calendar trigger per slot.
-//
 
 import Foundation
+import SwiftData
 import UserNotifications
 
 nonisolated enum NotificationScheduler {
-    /// iOS keeps at most 64 pending requests per app and silently drops the rest.
-    /// Each repeating burst slot costs one, so ~64 enabled slots is the ceiling.
+    /// iOS drops pending requests above this limit.
     static let pendingRequestLimit = 64
+
+    static let categoryIdentifier = "REMINDER"
+    static let doneActionIdentifier = "DONE"
+    static let reminderIDKey = "reminderID"
+
+    static func registerCategories() {
+        let done = UNNotificationAction(
+            identifier: doneActionIdentifier,
+            title: "Done",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: categoryIdentifier,
+            actions: [done],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
 
     static func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
@@ -33,28 +49,40 @@ nonisolated enum NotificationScheduler {
     }
 
     static func schedule(_ schedule: ReminderSchedule) async {
-        cancel(schedule)
+        await cancel(schedule)
         guard schedule.isEnabled else { return }
 
         let center = UNUserNotificationCenter.current()
-        for (slot, components) in schedule.fireTimes.enumerated() {
+        let calendar = Calendar.current
+        let fires = schedule.upcomingFireDates(from: .now, calendar: calendar)
+
+        for (slot, date) in fires {
+            var components = calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: date
+            )
+            components.second = 0
             await addRequest(
-                id: schedule.identifier(slot: slot),
+                id: schedule.identifier(slot: slot, on: date, calendar: calendar),
                 title: schedule.title,
                 body: schedule.body(slot: slot),
+                reminderID: schedule.id,
                 components: components,
                 center: center
             )
         }
     }
 
-    static func cancel(_ schedule: ReminderSchedule) {
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: schedule.allIdentifiers)
+    static func cancel(_ schedule: ReminderSchedule) async {
+        let center = UNUserNotificationCenter.current()
+        let prefix = "\(schedule.id.uuidString)-"
+        let pending = await center.pendingNotificationRequests()
+        var ids = pending.map(\.identifier).filter { $0.hasPrefix(prefix) }
+        ids.append(contentsOf: schedule.legacyIdentifiers)
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        center.removeDeliveredNotifications(withIdentifiers: ids)
     }
 
-    /// Clears everything and rebuilds from the stored reminders, healing any drift
-    /// from edits made while the app was not running.
     static func resyncAll(_ schedules: [ReminderSchedule]) async {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         for schedule in schedules where schedule.isEnabled {
@@ -62,27 +90,39 @@ nonisolated enum NotificationScheduler {
         }
     }
 
+    static func completeToday(reminderID: UUID, modelContainer: ModelContainer) async {
+        let context = ModelContext(modelContainer)
+        let id = reminderID
+        let descriptor = FetchDescriptor<Reminder>(predicate: #Predicate { $0.id == id })
+        guard let reminder = try? context.fetch(descriptor).first else { return }
+
+        reminder.markCompletedToday()
+        try? context.save()
+        await schedule(reminder.schedule)
+    }
+
     static func pendingCount() async -> Int {
         await UNUserNotificationCenter.current().pendingNotificationRequests().count
     }
-
-    // MARK: - Private
 
     private static func addRequest(
         id: String,
         title: String,
         body: String?,
+        reminderID: UUID,
         components: DateComponents,
         center: UNUserNotificationCenter
     ) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.sound = .default
+        content.categoryIdentifier = categoryIdentifier
+        content.userInfo = [reminderIDKey: reminderID.uuidString]
         if let body {
             content.body = body
         }
 
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         try? await center.add(request)
     }

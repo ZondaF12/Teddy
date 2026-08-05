@@ -29,6 +29,14 @@ struct RemindersListView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                if reminder.isEnabled && !reminder.isCompletedToday {
+                                    Button("Done") {
+                                        markDone(reminder)
+                                    }
+                                    .tint(.green)
+                                }
+                            }
                     }
                     .onDelete(perform: delete)
                 }
@@ -52,16 +60,21 @@ struct RemindersListView: View {
         }
     }
 
-    // MARK: - Private
+    private func markDone(_ reminder: Reminder) {
+        reminder.markCompletedToday()
+        let schedule = reminder.schedule
+        Task { await NotificationScheduler.schedule(schedule) }
+    }
 
     private func delete(at offsets: IndexSet) {
-        // Snapshot before deleting; the models are unusable afterwards.
         let schedules = offsets.map { reminders[$0].schedule }
-        for schedule in schedules {
-            NotificationScheduler.cancel(schedule)
-        }
         for index in offsets {
             modelContext.delete(reminders[index])
+        }
+        Task {
+            for schedule in schedules {
+                await NotificationScheduler.cancel(schedule)
+            }
         }
     }
 }

@@ -10,10 +10,12 @@ import SwiftData
 
 @main
 struct TeddyApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: Reminder.self)
+        .modelContainer(appDelegate.modelContainer)
     }
 }
