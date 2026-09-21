@@ -71,6 +71,48 @@ struct TeddyTests {
         #expect(Reminder.isCompleted(on: reminder.lastCompletedDay, calendar: calendar, now: now))
     }
 
+    @Test func plannedNotificationsRepeatDailyWhenNotDone() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = date(calendar, 2026, 8, 5, 13, 5)
+
+        let schedule = Reminder(name: "Water", hour: 13, minute: 0, repeatCount: 3).schedule
+        let planned = schedule.plannedNotifications(from: now, calendar: calendar)
+
+        #expect(planned.count == 3)
+        #expect(planned.filter(\.repeats).count == 3)
+        #expect(planned.map(\.trigger) == [
+            DateComponents(hour: 13, minute: 0),
+            DateComponents(hour: 13, minute: 20),
+            DateComponents(hour: 13, minute: 40),
+        ])
+    }
+
+    @Test func plannedNotificationsDoneTodaySkipOnlyTodaysWeekday() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = date(calendar, 2026, 8, 5, 13, 5)
+        let todayWeekday = calendar.component(.weekday, from: now)
+
+        let reminder = Reminder(name: "Water", hour: 9, minute: 30)
+        reminder.markCompletedToday(calendar: calendar, now: now)
+        let planned = reminder.schedule.plannedNotifications(from: now, calendar: calendar)
+
+        let weekly = planned.filter(\.repeats)
+        let expectedWeekdays = Set((1...7).filter { $0 != todayWeekday })
+        let weeklyTimes = Set(weekly.map { DateComponents(hour: $0.trigger.hour, minute: $0.trigger.minute) })
+        #expect(Set(weekly.compactMap(\.trigger.weekday)) == expectedWeekdays)
+        #expect(weeklyTimes == [DateComponents(hour: 9, minute: 30)])
+
+        let oneOff = planned.filter { !$0.repeats }
+        #expect(oneOff.map(\.trigger) == [DateComponents(year: 2026, month: 8, day: 12, hour: 9, minute: 30)])
+    }
+
+    @Test func plannedNotificationsEmptyWhenDisabled() {
+        let schedule = Reminder(name: "Water", hour: 9, minute: 30, isEnabled: false).schedule
+        #expect(schedule.plannedNotifications().isEmpty)
+    }
+
     @Test func leaveNotifyAlwaysWhenEnabled() {
         let now = date(Calendar(identifier: .gregorian), 2026, 8, 5, 13, 30)
         let should = HomeLeaveSettings.shouldNotifyOnLeave(
