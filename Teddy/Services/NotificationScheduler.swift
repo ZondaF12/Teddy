@@ -53,21 +53,14 @@ nonisolated enum NotificationScheduler {
         guard schedule.isEnabled else { return }
 
         let center = UNUserNotificationCenter.current()
-        let calendar = Calendar.current
-        let fires = schedule.upcomingFireDates(from: .now, calendar: calendar)
-
-        for (slot, date) in fires {
-            var components = calendar.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: date
-            )
-            components.second = 0
+        for planned in schedule.plannedNotifications() {
             await addRequest(
-                id: schedule.identifier(slot: slot, on: date, calendar: calendar),
+                id: planned.identifier,
                 title: schedule.title,
-                body: schedule.body(slot: slot),
+                body: schedule.body(slot: planned.slot),
                 reminderID: schedule.id,
-                components: components,
+                trigger: planned.trigger,
+                repeats: planned.repeats,
                 center: center
             )
         }
@@ -120,7 +113,8 @@ nonisolated enum NotificationScheduler {
         title: String,
         body: String?,
         reminderID: UUID,
-        components: DateComponents,
+        trigger triggerComponents: DateComponents,
+        repeats: Bool,
         center: UNUserNotificationCenter
     ) async {
         let content = UNMutableNotificationContent()
@@ -132,7 +126,7 @@ nonisolated enum NotificationScheduler {
             content.body = body
         }
 
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: triggerComponents, repeats: repeats)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         try? await center.add(request)
     }

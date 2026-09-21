@@ -159,8 +159,51 @@ struct ReminderSchedule: Sendable {
         )
     }
 
-    func identifier(slot: Int, on day: Date, calendar: Calendar = .current) -> String {
-        "\(id.uuidString)-\(slot)-\(Self.dayKey(for: day, calendar: calendar))"
+    /// Repeating triggers so alerts never run out; Done today swaps today's daily repeat for weekly ones.
+    func plannedNotifications(
+        from now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [PlannedNotification] {
+        guard isEnabled else { return [] }
+
+        let completedToday = Reminder.isCompleted(on: lastCompletedDay, calendar: calendar, now: now)
+        let todayWeekday = calendar.component(.weekday, from: now)
+        let sameWeekdayNextWeek = calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: now))
+
+        var planned: [PlannedNotification] = []
+        for (slot, time) in fireTimes.enumerated() {
+            if !completedToday {
+                planned.append(PlannedNotification(
+                    identifier: "\(id.uuidString)-\(slot)-daily",
+                    slot: slot,
+                    trigger: DateComponents(hour: time.hour, minute: time.minute),
+                    repeats: true
+                ))
+                continue
+            }
+
+            for weekday in 1...7 where weekday != todayWeekday {
+                planned.append(PlannedNotification(
+                    identifier: "\(id.uuidString)-\(slot)-weekday\(weekday)",
+                    slot: slot,
+                    trigger: DateComponents(hour: time.hour, minute: time.minute, weekday: weekday),
+                    repeats: true
+                ))
+            }
+
+            if let sameWeekdayNextWeek {
+                var trigger = calendar.dateComponents([.year, .month, .day], from: sameWeekdayNextWeek)
+                trigger.hour = time.hour
+                trigger.minute = time.minute
+                planned.append(PlannedNotification(
+                    identifier: "\(id.uuidString)-\(slot)-\(Self.dayKey(for: sameWeekdayNextWeek, calendar: calendar))",
+                    slot: slot,
+                    trigger: trigger,
+                    repeats: false
+                ))
+            }
+        }
+        return planned
     }
 
     /// Ids from the old repeating-slot scheduler.
@@ -174,21 +217,6 @@ struct ReminderSchedule: Sendable {
         return "Reminder \(slot + 1) of \(fireTimes.count)"
     }
 
-    func upcomingFireDates(
-        from now: Date = .now,
-        calendar: Calendar = .current
-    ) -> [(slot: Int, date: Date)] {
-        Reminder.upcomingFireDates(
-            hour: hour,
-            minute: minute,
-            repeatCount: repeatCount,
-            intervalMinutes: intervalMinutes,
-            lastCompletedDay: lastCompletedDay,
-            from: now,
-            calendar: calendar
-        )
-    }
-
     private static func dayKey(for day: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: day)
         let year = components.year ?? 0
@@ -196,6 +224,13 @@ struct ReminderSchedule: Sendable {
         let dayValue = components.day ?? 0
         return String(format: "%04d%02d%02d", year, month, dayValue)
     }
+}
+
+struct PlannedNotification: Equatable, Sendable {
+    let identifier: String
+    let slot: Int
+    let trigger: DateComponents
+    let repeats: Bool
 }
 
 extension DateComponents {
