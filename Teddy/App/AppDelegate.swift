@@ -13,12 +13,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     override init() {
         do {
-            modelContainer = try ModelContainer(for: Reminder.self)
+            modelContainer = try ModelContainer(for: Reminder.self, HomeLeaveSettings.self)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
         super.init()
         notificationDelegate.modelContainer = modelContainer
+        LocationMonitor.shared.configure(modelContainer: modelContainer)
     }
 
     func application(
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         let center = UNUserNotificationCenter.current()
         center.delegate = notificationDelegate
         NotificationScheduler.registerCategories()
+        LocationMonitor.shared.refreshMonitoring()
         return true
     }
 }

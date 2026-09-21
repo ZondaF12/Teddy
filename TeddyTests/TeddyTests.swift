@@ -71,6 +71,77 @@ struct TeddyTests {
         #expect(Reminder.isCompleted(on: reminder.lastCompletedDay, calendar: calendar, now: now))
     }
 
+    @Test func leaveNotifyAlwaysWhenEnabled() {
+        let now = date(Calendar(identifier: .gregorian), 2026, 8, 5, 13, 30)
+        let should = HomeLeaveSettings.shouldNotifyOnLeave(
+            isEnabled: true,
+            hasHomeLocation: true,
+            remindMode: .always,
+            withinHours: 2,
+            lastLeaveNotificationAt: nil,
+            reminders: [],
+            now: now,
+            cooldown: 0
+        )
+        #expect(should)
+    }
+
+    @Test func leaveNotifyWithinHoursOnlyWhenReminderUpcoming() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = date(calendar, 2026, 8, 5, 13, 30)
+        let reminder = (
+            isEnabled: true,
+            hour: 15,
+            minute: 0,
+            repeatCount: 1,
+            intervalMinutes: 20,
+            lastCompletedDay: Date?.none
+        )
+
+        let inWindow = HomeLeaveSettings.shouldNotifyOnLeave(
+            isEnabled: true,
+            hasHomeLocation: true,
+            remindMode: .withinHours,
+            withinHours: 2,
+            lastLeaveNotificationAt: nil,
+            reminders: [reminder],
+            now: now,
+            calendar: calendar,
+            cooldown: 0
+        )
+        #expect(inWindow)
+
+        let outOfWindow = HomeLeaveSettings.shouldNotifyOnLeave(
+            isEnabled: true,
+            hasHomeLocation: true,
+            remindMode: .withinHours,
+            withinHours: 2,
+            lastLeaveNotificationAt: nil,
+            reminders: [reminder],
+            now: date(calendar, 2026, 8, 5, 12, 0),
+            calendar: calendar,
+            cooldown: 0
+        )
+        #expect(!outOfWindow)
+    }
+
+    @Test func leaveNotifyRespectsCooldown() {
+        let now = date(Calendar(identifier: .gregorian), 2026, 8, 5, 13, 30)
+        let recent = now.addingTimeInterval(-60)
+        let should = HomeLeaveSettings.shouldNotifyOnLeave(
+            isEnabled: true,
+            hasHomeLocation: true,
+            remindMode: .always,
+            withinHours: 2,
+            lastLeaveNotificationAt: recent,
+            reminders: [],
+            now: now,
+            cooldown: 30 * 60
+        )
+        #expect(!should)
+    }
+
     private func date(
         _ calendar: Calendar,
         _ year: Int,

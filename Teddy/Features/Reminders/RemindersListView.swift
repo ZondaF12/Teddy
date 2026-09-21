@@ -48,6 +48,13 @@ struct RemindersListView: View {
         .background(Theme.screenGradient().ignoresSafeArea())
         .navigationTitle("Reminders")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Add Reminder", systemImage: "plus") { isAddingReminder = true }
             }
@@ -83,5 +90,5 @@ struct RemindersListView: View {
     NavigationStack {
         RemindersListView()
     }
-    .modelContainer(for: Reminder.self, inMemory: true)
+    .modelContainer(for: [Reminder.self, HomeLeaveSettings.self], inMemory: true)
 }
